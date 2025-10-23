@@ -1,9 +1,7 @@
-const { PrismaClient } = require('@prisma/client');
-const { signToken } = require('../utils/jwt');
+const { signToken, verifyToken } = require('../utils/jwt');
 const { validateCode, markCodeAsUsed } = require('../services/codeService');
 const logger = require('../utils/logger');
-
-const prisma = new PrismaClient();
+const prisma = require('../lib/prisma');
 
 const validateCodeController = async (req, res, next) => {
   try {
@@ -16,7 +14,7 @@ const validateCodeController = async (req, res, next) => {
       });
     }
 
-    const validation = await validateCode(code);
+    const validation = await validateCode(code.trim());
 
     if (!validation.valid) {
       return res.status(400).json({
@@ -30,6 +28,25 @@ const validateCodeController = async (req, res, next) => {
       type: 'session'
     });
 
+    let authToken = null;
+    let userPayload = null;
+
+    if (validation.user) {
+      authToken = signToken({
+        userId: validation.user.id,
+        email: validation.user.email,
+        type: 'user'
+      });
+
+      userPayload = {
+        id: validation.user.id,
+        email: validation.user.email,
+        brandData: validation.user.brandData,
+        createdAt: validation.user.createdAt,
+        updatedAt: validation.user.updatedAt
+      };
+    }
+
     logger.info('Code validated successfully:', { code });
 
     res.json({
@@ -37,12 +54,8 @@ const validateCodeController = async (req, res, next) => {
       sessionToken,
       hasAccount: validation.hasAccount,
       codeId: validation.codeId,
-      ...(validation.user && {
-        user: {
-          id: validation.user.id,
-          email: validation.user.email
-        }
-      })
+      token: authToken,
+      user: userPayload
     });
   } catch (error) {
     logger.error('Error validating code:', { error: error.message });
@@ -59,7 +72,6 @@ const claimCode = async (req, res, next) => {
 
     if (!actualCodeId && sessionToken) {
       try {
-        const { verifyToken } = require('../utils/jwt');
         const decoded = verifyToken(sessionToken);
         actualCodeId = decoded.codeId;
       } catch (jwtError) {
@@ -150,26 +162,50 @@ const claimCode = async (req, res, next) => {
 
 const login = async (req, res, next) => {
   try {
-    const { email } = req.body;
+    const { email, sessionToken } = req.body;
 
-    if (!email) {
+    if (!sessionToken) {
       return res.status(400).json({
         success: false,
-        error: 'Email is required'
+        error: 'sessionToken is required'
       });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email },
-      include: {
-        code: true
-      }
+    let decoded;
+    try {
+      decoded = verifyToken(sessionToken);
+    } catch (jwtError) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid session token'
+      });
+    }
+
+    if (decoded.type !== 'session' || !decoded.codeId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid session token'
+      });
+    }
+
+    const codeRecord = await prisma.code.findUnique({
+      where: { id: decoded.codeId },
+      include: { user: true }
     });
 
-    if (!user) {
+    if (!codeRecord || !codeRecord.user) {
       return res.status(404).json({
         success: false,
-        error: 'User not found'
+        error: 'No user found for this session token'
+      });
+    }
+
+    const user = codeRecord.user;
+
+    if (email && email.toLowerCase() !== user.email.toLowerCase()) {
+      return res.status(403).json({
+        success: false,
+        error: 'Email does not match session token'
       });
     }
 
@@ -179,7 +215,7 @@ const login = async (req, res, next) => {
       type: 'user'
     });
 
-    logger.info('User logged in:', { email });
+    logger.info('User login via session token:', { email: user.email });
 
     res.json({
       success: true,
@@ -188,7 +224,8 @@ const login = async (req, res, next) => {
         id: user.id,
         email: user.email,
         brandData: user.brandData,
-        createdAt: user.createdAt
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
       }
     });
   } catch (error) {

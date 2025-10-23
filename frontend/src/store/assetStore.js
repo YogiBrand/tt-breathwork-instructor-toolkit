@@ -58,7 +58,12 @@ export const useAssetStore = create((set, get) => ({
       const newAsset = response.data.asset;
 
       set((state) => ({
-        assets: [newAsset, ...state.assets],
+        assets: [
+          newAsset,
+          ...state.assets.filter(
+            (asset) => asset.id !== newAsset.id && asset.assetType !== newAsset.assetType
+          ),
+        ],
         currentAsset: newAsset,
         isGenerating: false,
       }));
@@ -125,22 +130,6 @@ export const useAssetStore = create((set, get) => ({
     }
   },
 
-  deleteAsset: async (assetId) => {
-    try {
-      await assetAPI.delete(assetId);
-
-      set((state) => ({
-        assets: state.assets.filter((a) => a.id !== assetId),
-        currentAsset: state.currentAsset?.id === assetId ? null : state.currentAsset,
-      }));
-
-      return { success: true };
-    } catch (error) {
-      set({ error: error.message || 'Failed to delete asset' });
-      return { success: false, error: error.message };
-    }
-  },
-
   setCurrentAsset: (asset) => {
     set({ currentAsset: asset });
   },
@@ -168,37 +157,13 @@ export const useAssetStore = create((set, get) => ({
   // Asset organization helpers
   getAssetsByCategory: (category) => {
     const { assets } = get();
-    const categoryMap = {
-      'for-you': [
-        'onePager',
-        'businessCard',
-        'emailSignature',
-        'linkedinBanner',
-        'instagramBio',
-        'websiteAbout',
-        'mediaKit',
-        'speakerSheet',
-      ],
-      'for-clients': [
-        'welcomeEmail',
-        'healthForm',
-        'waiverForm',
-        'sessionGuide',
-        'followUpEmail',
-        'testimonialRequest',
-      ],
-      'for-companies': [
-        'corporatePitch',
-        'workshopProposal',
-        'pricingSheet',
-        'caseStudy',
-        'roiCalculator',
-      ],
-    };
+    return assets.filter((asset) => {
+      if (asset?.customData?.category) {
+        return asset.customData.category === category;
+      }
 
-    return assets.filter((asset) =>
-      categoryMap[category]?.includes(asset.assetType)
-    );
+      return false;
+    });
   },
 
   getAssetByType: (assetType) => {

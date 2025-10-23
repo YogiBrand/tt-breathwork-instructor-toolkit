@@ -5,7 +5,6 @@ import { ArrowLeft, Download, Edit, Check, Wand2 } from 'lucide-react';
 import { useAssetStore } from '../store/assetStore';
 import { useBrandStore } from '../store/brandStore';
 import { toast } from '../components/common/Toast';
-import html2pdf from 'html2pdf.js';
 import {
   OnePagerTemplate,
   BusinessCardTemplate,
@@ -16,17 +15,22 @@ import {
 const AssetViewer = () => {
   const { assetId } = useParams();
   const navigate = useNavigate();
-  const { assets } = useAssetStore();
+  const {
+    assets,
+    generateAsset: generateAssetRequest,
+    downloadAsset: downloadAssetRequest,
+  } = useAssetStore();
   const { brandData } = useBrandStore();
   const previewRef = useRef(null);
 
   const [selectedVariation, setSelectedVariation] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [customizations, setCustomizations] = useState({});
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [isGeneratingAsset, setIsGeneratingAsset] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   // Find the asset
-  const asset = assets.find(a => a.id === assetId);
+  const asset = assets.find((a) => a.id === assetId);
 
   // Get available variations for this asset type
   const variations = asset ? getAssetVariations(asset.assetType) : [];
@@ -37,27 +41,62 @@ const AssetViewer = () => {
       navigate('/dashboard');
       return;
     }
+  }, [asset, navigate]);
 
-    // Select first variation by default
-    if (variations.length > 0 && !selectedVariation) {
-      setSelectedVariation(variations[0]);
+  useEffect(() => {
+    if (!asset) return;
+
+    const lastCustomization = asset.customData?.lastCustomization || {};
+    if (!variations || variations.length === 0) {
+      setSelectedVariation(null);
+      return;
     }
 
-    // Initialize customizations from brand data
+    setSelectedVariation((prev) => {
+      if (prev) {
+        const stillExists = variations.find((variation) => variation.id === prev.id);
+        if (stillExists) {
+          return prev;
+        }
+      }
+
+      const fallback =
+        variations.find((variation) => variation.id === lastCustomization.variation) ||
+        variations[0];
+
+      return fallback;
+    });
+  }, [asset, variations]);
+
+  useEffect(() => {
+    if (!asset) return;
+
+    const palette = brandData.colorPalette || {};
+    const lastCustomization = asset.customData?.lastCustomization || {};
+
     setCustomizations({
       fullName: brandData.fullName || '',
-      tagline: brandData.tagline || '',
+      tagline:
+        lastCustomization.tagline ||
+        brandData.oneLine ||
+        brandData.signatureTechnique ||
+        '',
       email: brandData.email || '',
       phone: brandData.phone || '',
       website: brandData.website || '',
-      primaryColor: brandData.primaryColor || '#2D5F7F',
-      secondaryColor: brandData.secondaryColor || '#47B5A5',
-      // Add more customizable fields
+      services: lastCustomization.services || brandData.services || [],
+      primaryColor: lastCustomization.primaryColor || palette.primary || '#0B2545',
+      secondaryColor: lastCustomization.secondaryColor || palette.accent || '#3ABAB4',
+      ...lastCustomization,
     });
-  }, [asset, brandData, variations]);
+  }, [asset, brandData]);
 
   const handleVariationSelect = (variation) => {
     setSelectedVariation(variation);
+    setCustomizations((prev) => ({
+      ...prev,
+      variation: variation.id,
+    }));
     toast.success(`Selected ${variation.name} template`);
   };
 
@@ -69,47 +108,59 @@ const AssetViewer = () => {
   };
 
   const handleGenerate = async () => {
-    setIsGenerating(true);
-    try {
-      // Here we'll call the backend to generate the actual PDF/file
-      // with the selected variation and customizations
+    if (!asset) return;
+    if (isPreviewMode) {
+      toast.info('Create an account to generate downloadable assets.');
+      return;
+    }
 
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate generation
+    setIsGeneratingAsset(true);
+    try {
+      const payload = {
+        ...customizations,
+        variation: selectedVariation?.id,
+        services: customizations.services || brandData.services || [],
+      };
+
+      const result = await generateAssetRequest(asset.assetType, asset.userId, payload);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to generate asset');
+      }
 
       toast.success('Asset generated successfully!');
       setIsEditing(false);
     } catch (error) {
-      toast.error('Failed to generate asset');
+      const message = error.message || 'Failed to generate asset';
+      toast.error(message);
     } finally {
-      setIsGenerating(false);
+      setIsGeneratingAsset(false);
     }
   };
 
   const handleDownload = async () => {
-    if (!previewRef.current) {
-      toast.error('No preview to download');
+    if (!asset) return;
+    if (isPreviewMode) {
+      toast.info('Create an account to download finalized assets.');
+      return;
+    }
+    if (!asset.filePath) {
+      toast.error('Please generate this asset before downloading.');
       return;
     }
 
-    setIsGenerating(true);
+    setIsDownloading(true);
     try {
-      const element = previewRef.current;
-
-      const opt = {
-        margin: 0,
-        filename: `${asset.title.replace(/\s+/g, '-')}-${selectedVariation?.id || 'default'}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, logging: false },
-        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-      };
-
-      await html2pdf().set(opt).from(element).save();
-      toast.success('Asset downloaded successfully!');
+      const result = await downloadAssetRequest(asset.id);
+      if (!result.success) {
+        throw new Error(result.error || 'Download failed');
+      }
+      toast.success('Download started—check your browser downloads.');
     } catch (error) {
-      console.error('Download error:', error);
-      toast.error('Failed to download asset');
+      const message = error.message || 'Failed to download asset';
+      toast.error(message);
     } finally {
-      setIsGenerating(false);
+      setIsDownloading(false);
     }
   };
 
@@ -123,10 +174,12 @@ const AssetViewer = () => {
       );
     }
 
+    const palette = brandData.colorPalette || {};
     const templateData = {
       ...customizations,
-      primaryColor: customizations.primaryColor || brandData.primaryColor || '#2D5F7F',
-      secondaryColor: customizations.secondaryColor || brandData.secondaryColor || '#47B5A5',
+      primaryColor: customizations.primaryColor || palette.primary || '#0B2545',
+      secondaryColor: customizations.secondaryColor || palette.accent || '#3ABAB4',
+      services: customizations.services || brandData.services || [],
     };
 
     // Select the right template component based on asset type
@@ -138,9 +191,10 @@ const AssetViewer = () => {
       case 'emailSignature':
         return <EmailSignatureTemplate variation={selectedVariation.id} data={templateData} />;
       default:
+        const fallbackTitle = asset.customData?.title || asset.title || asset.fileName;
         return (
           <div className="p-12 text-center">
-            <p className="text-gray-500 mb-4">Template coming soon for {asset.title}</p>
+            <p className="text-gray-500 mb-4">Template coming soon for {fallbackTitle}</p>
             <p className="text-sm text-gray-400">Currently showing: {selectedVariation.name}</p>
           </div>
         );
@@ -150,6 +204,12 @@ const AssetViewer = () => {
   if (!asset) {
     return null;
   }
+
+  const displayTitle = asset.customData?.title || asset.title || asset.fileName;
+  const displayDescription =
+    asset.customData?.description || asset.description || 'Generate to unlock this asset.';
+  const isPreviewMode = !asset.userId;
+  const canDownload = Boolean(asset.filePath) && !isPreviewMode;
 
   return (
     <div className="min-h-screen bg-tt-off-white pb-12">
@@ -167,9 +227,28 @@ const AssetViewer = () => {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-heading font-bold mb-2">
-                {asset.title}
+                {displayTitle}
               </h1>
-              <p className="text-white/80">{asset.description}</p>
+              <div className="flex items-center gap-2 mb-2">
+                <span
+                  className={`badge ${
+                    canDownload ? 'badge-success' : 'badge-warning'
+                  }`}
+                >
+                  {canDownload ? 'Ready' : isPreviewMode ? 'Preview Mode' : 'Draft'}
+                </span>
+                {asset.customData?.category && (
+                  <span className="badge badge-secondary capitalize">
+                    {asset.customData.category.replace('-', ' ')}
+                  </span>
+                )}
+              </div>
+              <p className="text-white/80">{displayDescription}</p>
+              {isPreviewMode && (
+                <p className="text-sm text-white/70 mt-3">
+                  Create an account and complete your brand wizard to generate downloadable files.
+                </p>
+              )}
             </div>
 
             <div className="flex gap-3">
@@ -185,12 +264,15 @@ const AssetViewer = () => {
 
               <motion.button
                 onClick={handleDownload}
-                className="btn btn-primary"
+                className={`btn btn-primary ${
+                  !canDownload || isDownloading ? 'opacity-70 cursor-not-allowed' : ''
+                }`}
+                disabled={!canDownload || isDownloading}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
               >
-                <Download size={20} />
-                <span>Download</span>
+                <Download size={20} className={isDownloading ? 'animate-spin' : ''} />
+                <span>{canDownload ? (isDownloading ? 'Downloading...' : 'Download') : 'Generate First'}</span>
               </motion.button>
             </div>
           </div>
@@ -289,12 +371,12 @@ const AssetViewer = () => {
 
                       <motion.button
                         onClick={handleGenerate}
-                        disabled={isGenerating}
+                        disabled={isGeneratingAsset || isPreviewMode}
                         className="btn btn-primary w-full"
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
                       >
-                        {isGenerating ? (
+                        {isGeneratingAsset ? (
                           <>
                             <Wand2 className="animate-spin" size={20} />
                             <span>Generating...</span>

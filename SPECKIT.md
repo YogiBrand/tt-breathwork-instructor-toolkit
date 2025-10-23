@@ -1,5 +1,7 @@
 # TT Breathwork Instructor Toolkit - Technical Specification
 
+> **Maintenance note:** The living project playbooks now live under `speckit/`. Treat this file as a high-level overview only; always consult `speckit/README.md` and the workflows before editing code or documentation.
+
 ## Project Overview
 
 A white-label platform for TT Breathwork instructors to generate branded business materials. This toolkit provides newly certified instructors with 19 professional assets, a 90-day launch plan, and a complete business-in-a-box solution.

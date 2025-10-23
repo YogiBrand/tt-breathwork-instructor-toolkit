@@ -1,7 +1,5 @@
-const { PrismaClient } = require('@prisma/client');
 const logger = require('../utils/logger');
-
-const prisma = new PrismaClient();
+const prisma = require('../lib/prisma');
 
 const saveBrandData = async (req, res, next) => {
   try {

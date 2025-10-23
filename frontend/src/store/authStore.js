@@ -20,20 +20,20 @@ export const useAuthStore = create(
         set({ isLoading: true, error: null });
         try {
           const response = await authAPI.validateCode(code);
-          const { sessionToken, hasAccount, user, codeId } = response.data;
+          const { sessionToken, hasAccount, user, codeId, token } = response.data;
 
           set({
-            sessionToken,
+            sessionToken: token ? null : sessionToken,
             codeId,
             hasAccount,
             user: hasAccount ? user : null,
-            isAuthenticated: hasAccount,
+            isAuthenticated: Boolean(hasAccount && token),
             isLoading: false,
+            token: token || null,
           });
 
-          if (hasAccount && user?.token) {
-            setAuthToken(user.token);
-            set({ token: user.token });
+          if (token) {
+            setAuthToken(token);
           }
 
           return { success: true, hasAccount };
@@ -81,9 +81,15 @@ export const useAuthStore = create(
       },
 
       login: async (email) => {
+        const { sessionToken } = get();
+        if (!sessionToken) {
+          set({ error: 'No session token found' });
+          return { success: false, error: 'No session token found' };
+        }
+
         set({ isLoading: true, error: null });
         try {
-          const response = await authAPI.login(email);
+          const response = await authAPI.login(email, sessionToken);
           const { token, user } = response.data;
 
           setAuthToken(token);
@@ -94,6 +100,7 @@ export const useAuthStore = create(
             isAuthenticated: true,
             hasAccount: true,
             isLoading: false,
+            sessionToken: null,
           });
 
           return { success: true, user };

@@ -140,16 +140,17 @@ const EmailSignatureTemplate = ({ variation, data }) => {
                         <table cellPadding="0" cellSpacing="0" border="0">
                           <tbody>
                             <tr>
-                              <td style={{
-                                fontSize: '13px',
-                                color: '#555',
-                                paddingBottom: '6px',
-                                paddingRight: '10px',
-                                verticalAlign: 'top',
-                                width: '80px',
-                                fontWeight: 'bold',
-                                color: primaryColor
-                              }}>
+                              <td
+                                style={{
+                                  fontSize: '13px',
+                                  paddingBottom: '6px',
+                                  paddingRight: '10px',
+                                  verticalAlign: 'top',
+                                  width: '80px',
+                                  fontWeight: 'bold',
+                                  color: primaryColor,
+                                }}
+                              >
                                 Email:
                               </td>
                               <td style={{ fontSize: '13px', color: '#555', paddingBottom: '6px' }}>

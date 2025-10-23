@@ -40,11 +40,13 @@ const ASSET_TYPE_ICONS = {
   launchPlan: Calendar,
 };
 
-const AssetCard = ({
-  asset,
-  className = '',
-}) => {
+const AssetCard = ({ asset, className = '' }) => {
   const Icon = ASSET_TYPE_ICONS[asset.assetType] || FileText;
+  const displayTitle = asset.title || asset.customData?.title || asset.fileName || 'Asset';
+  const displayDescription = asset.description || asset.customData?.description || '';
+  const status = asset.status || (asset.filePath ? 'ready' : 'draft');
+  const lastUpdated =
+    asset.lastUpdated || asset.customData?.generatedAt || asset.updatedAt || asset.createdAt;
 
   return (
     <motion.div
@@ -52,15 +54,14 @@ const AssetCard = ({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
       className={`card card-hover group relative ${className}`}
-      whileHover={{ scale: 1.02 }}
-      transition={{ duration: 0.2 }}
+      whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
     >
       {/* Asset preview/icon */}
       <div className="relative mb-4 bg-gradient-to-br from-tt-navy-light to-tt-navy rounded-lg aspect-video flex items-center justify-center overflow-hidden">
         {asset.thumbnailUrl ? (
           <img
             src={asset.thumbnailUrl}
-            alt={asset.title}
+            alt={displayTitle}
             className="w-full h-full object-cover"
           />
         ) : (
@@ -68,18 +69,18 @@ const AssetCard = ({
         )}
 
         {/* Status badge */}
-        {asset.status && (
+        {status && (
           <div className="absolute top-2 right-2">
             <span
               className={`badge ${
-                asset.status === 'ready'
+                status === 'ready'
                   ? 'badge-success'
-                  : asset.status === 'draft'
+                  : status === 'draft'
                   ? 'badge-warning'
                   : 'badge-primary'
               }`}
             >
-              {asset.status}
+              {status}
             </span>
           </div>
         )}
@@ -88,20 +89,16 @@ const AssetCard = ({
       {/* Asset info */}
       <div className="mb-4">
         <h3 className="text-lg font-heading font-semibold text-tt-navy-dark mb-1">
-          {asset.title}
+          {displayTitle}
         </h3>
-        {asset.description && (
-          <p className="text-sm text-tt-grey-dark line-clamp-2">
-            {asset.description}
-          </p>
+        {displayDescription && (
+          <p className="text-sm text-tt-grey-dark line-clamp-2">{displayDescription}</p>
         )}
       </div>
 
       {/* Asset metadata */}
-      {asset.lastUpdated && (
-        <div className="text-xs text-tt-grey">
-          Updated {new Date(asset.lastUpdated).toLocaleDateString()}
-        </div>
+      {lastUpdated && (
+        <div className="text-xs text-tt-grey">Updated {new Date(lastUpdated).toLocaleDateString()}</div>
       )}
 
       {/* Click hint */}
@@ -119,12 +116,16 @@ AssetCard.propTypes = {
   asset: PropTypes.shape({
     id: PropTypes.string.isRequired,
     assetType: PropTypes.string.isRequired,
-    title: PropTypes.string.isRequired,
+    title: PropTypes.string,
     description: PropTypes.string,
     thumbnailUrl: PropTypes.string,
     fileName: PropTypes.string,
     status: PropTypes.oneOf(['ready', 'draft', 'processing']),
     lastUpdated: PropTypes.string,
+    customData: PropTypes.object,
+    filePath: PropTypes.string,
+    updatedAt: PropTypes.string,
+    createdAt: PropTypes.string,
   }).isRequired,
   className: PropTypes.string,
 };

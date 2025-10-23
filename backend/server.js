@@ -2,10 +2,10 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-const { PrismaClient } = require('@prisma/client');
 const config = require('./utils/config');
 const logger = require('./utils/logger');
 const errorHandler = require('./middleware/errorHandler');
+const prisma = require('./lib/prisma');
 
 const authRoutes = require('./routes/auth');
 const brandRoutes = require('./routes/brand');
@@ -13,8 +13,6 @@ const assetRoutes = require('./routes/assets');
 const launchPlanRoutes = require('./routes/launchPlan');
 
 const app = express();
-const prisma = new PrismaClient();
-
 app.use(helmet());
 
 app.use(cors(config.cors));

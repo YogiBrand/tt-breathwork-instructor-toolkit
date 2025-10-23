@@ -1,9 +1,10 @@
+@import './styles/tim-theme.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* Import Tim's brand theme */
-@import './styles/tim-theme.css';
 
 @layer base {
   * {

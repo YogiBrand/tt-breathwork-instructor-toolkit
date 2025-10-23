@@ -121,14 +121,13 @@ api.interceptors.response.use(
 export const authAPI = {
   validateCode: (code) => api.post('/auth/validate-code', { code }),
   claimCode: (email, sessionToken) => api.post('/auth/claim-code', { email, sessionToken }),
-  login: (email) => api.post('/auth/login', { email }),
+  login: (email, sessionToken) => api.post('/auth/login', { email, sessionToken }),
 };
 
 // API methods for brand management
 export const brandAPI = {
   save: (userId, brandData) => api.post('/brand/save', { userId, brandData }),
   get: (userId) => api.get(`/brand/${userId}`),
-  update: (userId, updates) => api.patch(`/brand/${userId}`, updates),
 };
 
 // API methods for asset management
@@ -138,41 +137,12 @@ export const assetAPI = {
     api.post(`/assets/generate/${templateId}`, { userId, customizations }),
   list: (userId) => api.get(`/assets/${userId}`),
   download: (assetId) => api.get(`/assets/download/${assetId}`, { responseType: 'blob' }),
-  delete: (assetId) => api.delete(`/assets/${assetId}`),
 };
 
 // API methods for launch plan
 export const launchPlanAPI = {
   getProgress: (userId) => api.get(`/launch-plan/${userId}`),
   completeWeek: (userId, week) => api.post('/launch-plan/complete-week', { userId, week }),
-  resetProgress: (userId) => api.post('/launch-plan/reset', { userId }),
-};
-
-// API methods for file uploads
-export const uploadAPI = {
-  uploadImage: (file, userId) => {
-    const formData = new FormData();
-    formData.append('image', file);
-    formData.append('userId', userId);
-
-    return api.post('/upload/image', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-  },
-
-  uploadLogo: (file, userId) => {
-    const formData = new FormData();
-    formData.append('logo', file);
-    formData.append('userId', userId);
-
-    return api.post('/upload/logo', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-  },
 };
 
 // Utility functions

@@ -2,7 +2,7 @@
 
 ## Stack
 - React 18 with Vite 5, Tailwind CSS, Framer Motion, Zustand, React Router.
-- PDF/asset tooling: html2pdf.js, jspdf, fabric.js (planned).
+- PDF/asset tooling: server-rendered PDFs (Puppeteer); client uses branded templates for previews.
 
 ## Local Setup
 1. `cd frontend`
@@ -22,13 +22,13 @@
 
 ## Key Flows
 - **Wizard → Dashboard:** Wizard completion triggers asset initialisation (API) and redirects to `/dashboard`.
-- **Asset viewer:** Pulls current asset from store; downloads currently client-side only.
-- **Code entry:** Staged login (code validation → claim account).
+- **Asset viewer:** Generates assets via `assetStore.generateAsset` → backend PDF, shows preview variations, and blocks downloads until a file exists (preview mode stays local only).
+- **Code entry:** Staged login (code validation → claim account). Returning users receive a JWT during `validateCode`.
 
 ## Testing & Validation
 - No automated tests yet—add React Testing Library when feasible.
-- Run `npm run lint` before submitting changes.
-- Smoke test: `npm run dev`, validate `/`, `/enter-code`, `/wizard`, `/dashboard`, `/asset/:id`.
+- `npm run lint` currently fails (no ESLint config). Either add `.eslintrc` or remove the script once linting strategy is decided.
+- Smoke test: `npm run dev`, validate `/`, `/enter-code`, `/wizard`, `/dashboard`, `/asset/:id`. For unauthenticated preview mode, ensure generation prompts users to create an account.
 
 ## Speckit Hooks
 - Document new routes/components in this file.

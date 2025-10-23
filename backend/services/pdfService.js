@@ -1,5 +1,6 @@
 const puppeteer = require('puppeteer');
 const logger = require('../utils/logger');
+const { renderTemplate } = require('../templates/pdf/templateRenderer');
 
 let browser = null;
 
@@ -68,50 +69,7 @@ const generatePDFFromTemplate = async (templateName, data, options = {}) => {
   try {
     logger.info('Generating PDF from template:', { templateName });
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="UTF-8">
-          <style>
-            * {
-              margin: 0;
-              padding: 0;
-              box-sizing: border-box;
-            }
-            body {
-              font-family: 'Inter', sans-serif;
-              color: #1F2937;
-            }
-            .container {
-              padding: 40px;
-            }
-            h1 {
-              font-family: 'Playfair Display', serif;
-              color: #0B2545;
-              font-size: 32px;
-              margin-bottom: 24px;
-            }
-            .placeholder {
-              text-align: center;
-              padding: 60px 20px;
-              background: #F9FAFB;
-              border: 2px dashed #D1D5DB;
-              border-radius: 8px;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h1>${templateName}</h1>
-            <div class="placeholder">
-              <p>Template: ${templateName}</p>
-              <p>PDF generation coming soon</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+    const html = renderTemplate(templateName, data);
 
     return await generatePDF(html, options);
   } catch (error) {

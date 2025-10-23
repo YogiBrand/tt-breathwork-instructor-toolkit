@@ -1,17 +1,32 @@
-const { PrismaClient } = require('@prisma/client');
 const logger = require('../utils/logger');
+const prisma = require('../lib/prisma');
+const { generatePDFFromTemplate } = require('../services/pdfService');
+const storageService = require('../services/storageService');
+const { getAssetDefinition, assetDefinitions } = require('../templates/assetDefinitions');
 
-const prisma = new PrismaClient();
+const buildAssetResponse = (asset) => ({
+  ...asset,
+  downloadUrl: `/api/assets/download/${asset.id}`
+});
 
 const generateAsset = async (req, res, next) => {
   try {
     const { templateId } = req.params;
-    const { userId, customizations } = req.body;
+    const { userId, customizations = {} } = req.body;
 
     if (!userId) {
       return res.status(400).json({
         success: false,
         error: 'userId is required'
+      });
+    }
+
+    const definition = getAssetDefinition(templateId);
+
+    if (!definition) {
+      return res.status(404).json({
+        success: false,
+        error: 'Unknown asset template'
       });
     }
 
@@ -28,14 +43,61 @@ const generateAsset = async (req, res, next) => {
 
     logger.info('Asset generation requested:', { userId, templateId });
 
+    const pdfBuffer = await generatePDFFromTemplate(definition.title, {
+      definition,
+      brandData: user.brandData || {},
+      customizations
+    });
+
+    const savedFile = await storageService.saveAsset(pdfBuffer, definition.fileName, userId);
+
+    const existingAsset = await prisma.asset.findFirst({
+      where: { userId, assetType: templateId }
+    });
+
+    const baseCustomData = existingAsset?.customData || {};
+
+    const assetPayload = {
+      fileName: savedFile.fileName,
+      filePath: savedFile.filePath,
+      fileSize: savedFile.fileSize,
+      customData: {
+        ...baseCustomData,
+        category: definition.category,
+        title: definition.title,
+        description: definition.description,
+        generatedAt: new Date().toISOString(),
+        lastCustomization: customizations,
+        brandSnapshot: user.brandData || {}
+      }
+    };
+
+    let assetRecord;
+
+    if (existingAsset) {
+      assetRecord = await prisma.asset.update({
+        where: { id: existingAsset.id },
+        data: assetPayload
+      });
+    } else {
+      assetRecord = await prisma.asset.create({
+        data: {
+          userId,
+          assetType: templateId,
+          ...assetPayload
+        }
+      });
+    }
+
+    logger.info('Asset generated successfully:', {
+      userId,
+      templateId,
+      assetId: assetRecord.id
+    });
+
     res.json({
       success: true,
-      message: 'Asset generation not yet implemented',
-      asset: {
-        id: 'placeholder',
-        fileName: `${templateId}.pdf`,
-        downloadUrl: `/api/assets/download/placeholder`
-      }
+      asset: buildAssetResponse(assetRecord)
     });
   } catch (error) {
     logger.error('Error generating asset:', { error: error.message });
@@ -61,7 +123,7 @@ const getUserAssets = async (req, res, next) => {
 
     res.json({
       success: true,
-      assets
+      assets: assets.map(buildAssetResponse)
     });
   } catch (error) {
     logger.error('Error getting user assets:', { error: error.message });
@@ -91,6 +153,15 @@ const downloadAsset = async (req, res, next) => {
       });
     }
 
+    if (!asset.filePath) {
+      return res.status(404).json({
+        success: false,
+        error: 'Asset has not been generated yet'
+      });
+    }
+
+    const fileBuffer = await storageService.getAsset(asset.filePath);
+
     await prisma.asset.update({
       where: { id: assetId },
       data: {
@@ -100,11 +171,13 @@ const downloadAsset = async (req, res, next) => {
 
     logger.info('Asset downloaded:', { assetId });
 
-    res.json({
-      success: true,
-      message: 'Asset download not yet implemented',
-      asset
-    });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${encodeURIComponent(asset.fileName)}"`
+    );
+
+    res.send(fileBuffer);
   } catch (error) {
     logger.error('Error downloading asset:', { error: error.message });
     next(error);
@@ -146,51 +219,25 @@ const initializeAssets = async (req, res, next) => {
       return res.json({
         success: true,
         message: 'Assets already initialized',
-        assets: existingAssets
+        assets: existingAssets.map(buildAssetResponse)
       });
     }
 
-    // Define all 19 asset templates
-    const assetTemplates = [
-      // Personal Branding Assets (8)
-      { assetType: 'onePager', fileName: 'professional-one-pager.pdf', category: 'for-you' },
-      { assetType: 'businessCard', fileName: 'business-card.pdf', category: 'for-you' },
-      { assetType: 'emailSignature', fileName: 'email-signature.html', category: 'for-you' },
-      { assetType: 'linkedinBanner', fileName: 'linkedin-banner.png', category: 'for-you' },
-      { assetType: 'instagramBio', fileName: 'instagram-bio.txt', category: 'for-you' },
-      { assetType: 'websiteAbout', fileName: 'website-about.txt', category: 'for-you' },
-      { assetType: 'mediaKit', fileName: 'media-kit.pdf', category: 'for-you' },
-      { assetType: 'speakerSheet', fileName: 'speaker-sheet.pdf', category: 'for-you' },
-
-      // Client Experience Assets (6)
-      { assetType: 'welcomeEmail', fileName: 'welcome-email.txt', category: 'for-clients' },
-      { assetType: 'healthForm', fileName: 'health-intake-form.pdf', category: 'for-clients' },
-      { assetType: 'waiverForm', fileName: 'liability-waiver.pdf', category: 'for-clients' },
-      { assetType: 'sessionGuide', fileName: 'session-preparation-guide.pdf', category: 'for-clients' },
-      { assetType: 'followUpEmail', fileName: 'follow-up-email.txt', category: 'for-clients' },
-      { assetType: 'testimonialRequest', fileName: 'testimonial-request.txt', category: 'for-clients' },
-
-      // Corporate Partnership Assets (5)
-      { assetType: 'corporatePitch', fileName: 'corporate-pitch-deck.pdf', category: 'for-companies' },
-      { assetType: 'workshopProposal', fileName: 'workshop-proposal.pdf', category: 'for-companies' },
-      { assetType: 'pricingSheet', fileName: 'pricing-sheet.pdf', category: 'for-companies' },
-      { assetType: 'caseStudy', fileName: 'case-study-template.pdf', category: 'for-companies' },
-      { assetType: 'roiCalculator', fileName: 'roi-calculator.xlsx', category: 'for-companies' }
-    ];
-
     // Create all assets in database
     const createdAssets = await Promise.all(
-      assetTemplates.map(template =>
+      assetDefinitions.map(definition =>
         prisma.asset.create({
           data: {
             userId: user.id,
-            assetType: template.assetType,
-            fileName: template.fileName,
-            filePath: `/assets/${user.id}/${template.fileName}`,
-            fileSize: 0, // Placeholder until actual file is generated
+            assetType: definition.assetType,
+            fileName: definition.fileName,
+            filePath: null,
+            fileSize: 0,
             customData: {
-              category: template.category,
-              codeId: user.codeId
+              category: definition.category,
+              title: definition.title,
+              description: definition.description,
+              brandSnapshot: user.brandData || {}
             }
           }
         })
@@ -206,7 +253,7 @@ const initializeAssets = async (req, res, next) => {
     res.json({
       success: true,
       message: `Successfully initialized ${createdAssets.length} assets`,
-      assets: createdAssets
+      assets: createdAssets.map(buildAssetResponse)
     });
 
   } catch (error) {

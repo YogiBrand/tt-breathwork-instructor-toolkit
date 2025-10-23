@@ -188,7 +188,7 @@ const Dashboard = () => {
 
   // Calculate progress
   const totalAssets = assets.length;
-  const completedAssets = assets.length; // All assets created = all completed for now
+  const completedAssets = assets.filter((asset) => Boolean(asset.filePath)).length;
   const progress = totalAssets > 0 ? Math.round((completedAssets / totalAssets) * 100) : 0;
 
   // Get tab counts (show actual asset counts)
@@ -209,17 +209,26 @@ const Dashboard = () => {
 
   // Get actual assets from database and enrich with template data
   const dbAssets = getAssetsByCategory(activeTab);
-  const currentAssets = dbAssets.map(asset => {
-    // Find the matching template to get title and description
-    const template = currentCategory.templates.find(t => t.assetType === asset.assetType);
-    return {
-      ...asset,
-      title: template?.title || asset.fileName,
-      description: template?.description || '',
-      status: 'ready', // All initialized assets are ready
-      lastUpdated: asset.createdAt
-    };
-  });
+  const templateList = currentCategory?.templates || [];
+  const currentAssets = dbAssets
+    .map((asset) => {
+      const template = templateList.find((t) => t.assetType === asset.assetType);
+      const isReady = Boolean(asset.filePath);
+      return {
+        ...asset,
+        title: asset.customData?.title || template?.title || asset.fileName,
+        description: asset.customData?.description || template?.description || '',
+        status: isReady ? 'ready' : 'draft',
+        lastUpdated: asset.customData?.generatedAt || asset.updatedAt || asset.createdAt,
+      };
+    })
+    .sort((a, b) => {
+      // Ready assets first, then alphabetical
+      if (a.status !== b.status) {
+        return a.status === 'ready' ? -1 : 1;
+      }
+      return a.title.localeCompare(b.title);
+    });
 
   return (
     <div className="min-h-screen bg-tt-off-white">
@@ -301,12 +310,10 @@ const Dashboard = () => {
               Your personalized 30-day action plan will guide you through launching your
               breathwork practice step by step.
             </p>
-            <button
-              className="btn btn-primary"
-              onClick={() => navigate('/launch-plan')}
-            >
-              View Launch Plan
-            </button>
+            <div className="inline-flex items-center gap-3 text-tt-grey-dark bg-tt-off-white px-4 py-2 rounded-lg border border-tt-grey-light">
+              <span className="badge badge-warning uppercase tracking-wide">In Progress</span>
+              <span>We’re building the launch plan experience. Check back soon!</span>
+            </div>
           </div>
         ) : currentAssets.length > 0 ? (
           // Asset grid
