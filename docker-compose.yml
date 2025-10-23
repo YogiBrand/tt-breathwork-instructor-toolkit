@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: tt-toolkit-db
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME:-tt_toolkit}
+      POSTGRES_USER: ${DB_USER:-ttuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - tt-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-ttuser}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5449:5432"  # Expose for development (using 5449 to avoid conflicts)
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: tt-toolkit-backend
+    restart: always
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      PORT: 3000
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5287}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5287}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      MAX_FILE_SIZE: ${MAX_FILE_SIZE:-10485760}
+      PDF_TIMEOUT: ${PDF_TIMEOUT:-30000}
+      BROWSER_ARGS: ${BROWSER_ARGS}
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - tt-network
+    ports:
+      - "3856:3000"  # Expose for development (using 3856 to avoid conflicts)
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: tt-toolkit-frontend
+    restart: always
+    environment:
+      VITE_API_URL: ${API_URL:-http://localhost:3856/api}
+      VITE_APP_ENV: ${NODE_ENV:-development}
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - tt-network
+    ports:
+      - "5287:5173"  # Expose for development (using 5287 to avoid conflicts)
+
+  # Nginx Reverse Proxy (for production)
+  nginx:
+    image: nginx:alpine
+    container_name: tt-toolkit-nginx
+    restart: always
+    ports:
+      - "8167:80"    # Using 8167 to avoid conflicts
+      - "8443:443"   # Using 8443 to avoid conflicts
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - uploads:/var/www/uploads:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - tt-network
+    profiles:
+      - production
+
+volumes:
+  postgres_data:
+    driver: local
+  uploads:
+    driver: local
+
+networks:
+  tt-network:
+    driver: bridge

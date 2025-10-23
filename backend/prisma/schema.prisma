@@ -1,0 +1,70 @@
+// Prisma Schema for TT Breathwork Instructor Toolkit
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Code {
+  id          String    @id @default(uuid())
+  code        String    @unique
+  status      String    @default("active") // active, used, revoked
+  issuedAt    DateTime  @default(now())
+  usedAt      DateTime?
+  usedByEmail String?
+  user        User?
+
+  @@index([code])
+  @@index([status])
+  @@map("codes")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  codeId    String   @unique
+  code      Code     @relation(fields: [codeId], references: [id])
+  brandData Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  assets    Asset[]
+  progress  LaunchProgress[]
+
+  @@index([email])
+  @@map("users")
+}
+
+model Asset {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assetType  String   // onePager, businessCard, welcomeEmail, etc.
+  fileName   String
+  filePath   String
+  fileSize   Int
+  customData Json?    @default("{}")
+  createdAt  DateTime @default(now())
+  downloads  Int      @default(0)
+
+  @@index([userId])
+  @@index([assetType])
+  @@map("assets")
+}
+
+model LaunchProgress {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  week        Int
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([userId, week])
+  @@index([userId])
+  @@map("launch_progress")
+}
